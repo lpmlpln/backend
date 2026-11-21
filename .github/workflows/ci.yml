@@ -1,0 +1,32 @@
+name: API
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-14
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mealplanner
+          POSTGRES_PASSWORD: mealplanner
+          POSTGRES_DB: mealplanner_test
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out core
+        uses: actions/checkout@v4
+        with:
+          repository: mealplanner-core
+          path: ../mealplanner-core
+      - run: swift build
+      - run: swift test
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_USER: mealplanner
+          POSTGRES_PASSWORD: mealplanner
+          POSTGRES_DB: mealplanner_test
