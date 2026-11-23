@@ -1,5 +1,5 @@
 {
-  "originHash" : "b10f850290a8faeb6b1fd53cc1c0cca3cd852a2681c6fae45e2bd13ec3f64dff",
+  "originHash" : "48fe4481445bdae8c2338f83e70f0e7fa364f38b11e569033f7fdf7ad866cbc0",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -197,6 +197,15 @@
       "state" : {
         "revision" : "0b0c23215764302f7db752b079c024fbaff12e62",
         "version" : "1.5.0"
+      }
+    },
+    {
+      "identity" : "swift-core",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/lpmlpln/swift-core.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "044451bc0a64f0cc9464cba761f8a35c1326c4a9"
       }
     },
     {

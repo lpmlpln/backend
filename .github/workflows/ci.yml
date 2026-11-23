@@ -18,11 +18,12 @@ jobs:
           - 5432:5432
     steps:
       - uses: actions/checkout@v4
-      - name: Check out core
-        uses: actions/checkout@v4
-        with:
-          repository: mealplanner-core
-          path: ../mealplanner-core
+      - name: Configure access to the core package
+        if: ${{ secrets.CORE_REPO_TOKEN != '' }}
+        run: |
+          git config --global \
+            url."https://x-access-token:${{ secrets.CORE_REPO_TOKEN }}@github.com/".insteadOf \
+            "https://github.com/"
       - run: swift build
       - run: swift test
         env:

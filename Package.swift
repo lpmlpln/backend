@@ -14,7 +14,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/jwt-kit.git", from: "5.1.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
         .package(url: "https://github.com/vapor/sql-kit.git", from: "3.7.0"),
-        .package(path: "../mealplanner-core"),
+        .package(url: "https://github.com/lpmlpln/swift-core.git", branch: "main"),
     ],
     targets: [
         .executableTarget(
@@ -27,7 +27,7 @@ let package = Package(
                 .product(name: "JWTKit", package: "jwt-kit"),
                 .product(name: "Crypto", package: "swift-crypto"),
                 .product(name: "SQLKit", package: "sql-kit"),
-                .product(name: "MealPlannerCore", package: "mealplanner-core"),
+                .product(name: "MealPlannerCore", package: "swift-core"),
             ],
             path: "Sources/App",
             swiftSettings: swiftSettings
@@ -37,7 +37,7 @@ let package = Package(
             dependencies: [
                 .target(name: "App"),
                 .product(name: "XCTVapor", package: "vapor"),
-                .product(name: "MealPlannerCore", package: "mealplanner-core"),
+                .product(name: "MealPlannerCore", package: "swift-core"),
             ],
             path: "Tests/AppTests",
             swiftSettings: swiftSettings

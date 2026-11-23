@@ -5,8 +5,10 @@ Vapor backend for MealPlanner: auth, recipes, plans, shopping lists, sync, impor
 ## Requirements
 
 - Swift 6.4+
-- PostgreSQL 16+
-- `mealplanner-core` as a sibling directory
+- PostgreSQL 16+ (optional for local development; SQLite is supported)
+- Access to the shared core package at `https://github.com/lpmlpln/swift-core.git`
+  (`MealPlannerCore`, `main` branch). If the repository is private, configure
+  Git credentials before building.
 
 ## Local development
 
