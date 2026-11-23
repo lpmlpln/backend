@@ -11,7 +11,6 @@ struct AdminTests {
         let user = UserModel(email: email, displayName: "Admin", isAdmin: true)
         try await user.save(on: app.db)
         return (user, email)
-        try await app.asyncShutdown()
     }
 
     func adminCookie(_ app: Application, email: String) async throws -> String {
@@ -33,7 +32,6 @@ struct AdminTests {
         }
         guard let cookieValue else { throw TestError.noResponse }
         return cookieValue
-        try await app.asyncShutdown()
     }
 
     @Test("Non-admin cannot access the dashboard")

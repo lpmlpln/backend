@@ -48,14 +48,24 @@ struct AdminController: Sendable {
         routes.post("admin", "logout", use: logout)
         routes.get("admin", use: dashboard)
         routes.get("admin", "users", use: users)
+        routes.get("admin", "users", "new", use: newUser)
+        routes.post("admin", "users", use: createUser)
         routes.post("admin", "users", ":userID", "disable", use: disableUser)
         routes.post("admin", "users", ":userID", "admin", use: grantAdmin)
+        routes.get("admin", "recipes", use: recipes)
+        routes.get("admin", "recipes", "new", use: newRecipe)
+        routes.post("admin", "recipes", use: createRecipe)
+        routes.get("admin", "recipes", ":recipeID", "edit", use: editRecipe)
+        routes.post("admin", "recipes", ":recipeID", use: updateRecipe)
+        routes.post("admin", "recipes", ":recipeID", "delete", use: deleteRecipe)
         routes.get("admin", "imports", use: imports)
+        routes.get("admin", "imports", "new", use: newImport)
+        routes.post("admin", "imports", use: createImport)
         routes.post("admin", "imports", ":jobID", "retry", use: retryImport)
         routes.get("admin", "audit", use: audit)
     }
 
-    private func page(_ title: String, _ content: String) -> Response {
+    func page(_ title: String, _ content: String) -> Response {
         let html = """
         <!doctype html><html lang="en"><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -63,13 +73,14 @@ struct AdminController: Sendable {
         <script src="/admin/static/htmx.min.js"></script>
         <link rel="stylesheet" href="/admin/static/admin.css"></head>
         <body><nav><a href="/admin">Dashboard</a> · <a href="/admin/users">Users</a> ·
+        <a href="/admin/recipes">Recipes</a> ·
         <a href="/admin/imports">Imports</a> · <a href="/admin/audit">Audit</a></nav>
         <main><h1>\(title)</h1>\(content)</main></body></html>
         """
         return Response(status: .ok, headers: ["Content-Type": "text/html; charset=utf-8"], body: .init(string: html))
     }
 
-    private func form(action: String, csrf: String, button: String, extra: String = "") -> String {
+    func form(action: String, csrf: String, button: String, extra: String = "") -> String {
         """
         <form method="post" action="\(action)">
         <input type="hidden" name="csrf" value="\(csrf)">
@@ -77,11 +88,11 @@ struct AdminController: Sendable {
         """
     }
 
-    private func csrf(_ request: Request) -> String {
+    func csrf(_ request: Request) -> String {
         TokenHasher.sha256(request.cookies["mp_admin"]?.string ?? "anonymous")
     }
 
-    private func validateCSRF(_ request: Request) throws {
+    func validateCSRF(_ request: Request) throws {
         let cookie = request.cookies["mp_admin"]?.string ?? "anonymous"
         let supplied = request.headers.first(name: "X-CSRF-Token")
             ?? (try? request.content.get(String.self, at: "csrf"))
@@ -207,7 +218,8 @@ struct AdminController: Sendable {
             <td>\(form(action: "/admin/users/\(id)/admin", csrf: csrf(request), button: user.isAdmin ? "Revoke admin" : "Grant admin"))</td></tr>
             """
         }
-        return page("Users", "<table><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th></th><th></th></tr>\(rows)</table>")
+        let newUserLink = "<p><a href='/admin/users/new'>New user</a></p>"
+        return page("Users", newUserLink + "<table><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th></th><th></th></tr>\(rows)</table>")
     }
 
     @Sendable
@@ -247,7 +259,8 @@ struct AdminController: Sendable {
             <td>\(form(action: "/admin/imports/\(id)/retry", csrf: csrf(request), button: "Retry"))</td></tr>
             """
         }
-        return page("Imports", "<table><tr><th>URL</th><th>Status</th><th>Attempts</th><th>Error</th><th></th></tr>\(rows)</table>")
+        let newImportLink = "<p><a href='/admin/imports/new'>New import</a></p>"
+        return page("Imports", newImportLink + "<table><tr><th>URL</th><th>Status</th><th>Attempts</th><th>Error</th><th></th></tr>\(rows)</table>")
     }
 
     @Sendable

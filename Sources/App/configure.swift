@@ -1,5 +1,6 @@
 import Fluent
 import FluentPostgresDriver
+import FluentSQLiteDriver
 import Foundation
 import JWTKit
 import MealPlannerCore
@@ -81,7 +82,83 @@ enum EmailSenderKey: StorageKey { typealias Value = any EmailSender }
 enum AppleVerifierKey: StorageKey { typealias Value = any AppleTokenVerifier }
 enum ImportServiceKey: StorageKey { typealias Value = ImportService }
 
-public func configure(_ app: Application) async throws {
+/// Database selection for local development, tests and production.
+///
+/// Resolution order:
+/// 1. `DB_DRIVER=sqlite` — SQLite at `SQLITE_PATH` (`:memory:` supported).
+/// 2. `DATABASE_URL` — a `sqlite:` URL selects SQLite, anything else PostgreSQL.
+/// 3. Testing environment — PostgreSQL using `POSTGRES_*` variables.
+/// 4. Local development — SQLite at `SQLITE_PATH` or `mealplanner.sqlite`.
+///
+/// `DB_DRIVER` is checked first so it overrides a `DATABASE_URL` from a local
+/// `.env` file, which Vapor loads automatically.
+///
+/// PostgreSQL remains the production database; SQLite is intentionally limited
+/// to local development and tests.
+enum AppDatabase {
+    static func configure(_ app: Application, values: [String: String]) throws {
+        if values["DB_DRIVER"]?.lowercased() == "sqlite" {
+            app.databases.use(
+                .sqlite(sqliteConfiguration(path: values["SQLITE_PATH"])),
+                as: .sqlite
+            )
+            return
+        }
+
+        if let url = values["DATABASE_URL"], !url.isEmpty {
+            if let configuration = sqliteConfiguration(from: url) {
+                app.databases.use(.sqlite(configuration), as: .sqlite)
+            } else {
+                app.databases.use(try .postgres(url: url), as: .psql)
+            }
+            return
+        }
+
+        if app.environment == .testing {
+            let host = values["POSTGRES_HOST"] ?? "localhost"
+            let port = values["POSTGRES_PORT"] ?? "5432"
+            let user = values["POSTGRES_USER"] ?? "mealplanner"
+            let password = values["POSTGRES_PASSWORD"] ?? "mealplanner"
+            let database = values["POSTGRES_DB"] ?? "mealplanner_test"
+            app.databases.use(
+                try .postgres(url: "postgres://\(user):\(password)@\(host):\(port)/\(database)"),
+                as: .psql
+            )
+            return
+        }
+
+        // No explicit configuration in development: use a local SQLite file so
+        // `swift run App` works without a PostgreSQL server.
+        app.databases.use(
+            .sqlite(sqliteConfiguration(path: values["SQLITE_PATH"])),
+            as: .sqlite
+        )
+    }
+
+    private static func sqliteConfiguration(from url: String) -> SQLiteConfiguration? {
+        guard url.hasPrefix("sqlite:") else { return nil }
+        let remainder = String(url.dropFirst("sqlite:".count))
+
+        if remainder.contains(":memory:") || remainder == "//memory" || remainder == "memory" {
+            return SQLiteConfiguration(storage: .memory)
+        }
+
+        var path = remainder
+        if path.hasPrefix("//") { path = String(path.dropFirst(2)) }
+        guard !path.isEmpty else { return SQLiteConfiguration(storage: .memory) }
+        return SQLiteConfiguration(storage: .file(path: path))
+    }
+
+    private static func sqliteConfiguration(path: String?) -> SQLiteConfiguration {
+        let value = path ?? "mealplanner.sqlite"
+        if value == ":memory:" || value == "memory" {
+            return SQLiteConfiguration(storage: .memory)
+        }
+        return SQLiteConfiguration(storage: .file(path: value))
+    }
+}
+
+public func configure(_ app: Application, databaseValues: [String: String]? = nil) async throws {
     app.http.server.configuration.hostname = Environment.get("HOSTNAME") ?? "0.0.0.0"
     app.http.server.configuration.port = Int(Environment.get("PORT") ?? "") ?? 8080
 
@@ -99,21 +176,7 @@ public func configure(_ app: Application) async throws {
     let jwtSecret = Environment.get("JWT_SECRET") ?? "development-only-secret-change-me"
     app.jwtManager = await JWTManager(secret: jwtSecret)
 
-    if let url = Environment.get("DATABASE_URL") {
-        app.databases.use(try .postgres(url: url), as: .psql)
-    } else if app.environment == .testing {
-        let host = Environment.get("POSTGRES_HOST") ?? "localhost"
-        let port = Environment.get("POSTGRES_PORT") ?? "5432"
-        let user = Environment.get("POSTGRES_USER") ?? "mealplanner"
-        let password = Environment.get("POSTGRES_PASSWORD") ?? "mealplanner"
-        let database = Environment.get("POSTGRES_DB") ?? "mealplanner_test"
-        app.databases.use(
-            try .postgres(
-                url: "postgres://\(user):\(password)@\(host):\(port)/\(database)"
-            ),
-            as: .psql
-        )
-    }
+    try AppDatabase.configure(app, values: databaseValues ?? ProcessInfo.processInfo.environment)
 
     app.migrations.add(CreateUsers())
     app.migrations.add(CreateUserDevices())
@@ -130,5 +193,10 @@ public func configure(_ app: Application) async throws {
 
     if app.environment != .testing {
         try await app.autoMigrate()
+        try await AdminBootstrap.ensureInitialAdmin(
+            on: app.db,
+            email: Environment.get("INITIAL_ADMIN_EMAIL"),
+            logger: app.logger
+        )
     }
 }

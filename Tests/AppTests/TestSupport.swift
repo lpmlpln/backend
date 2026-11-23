@@ -62,10 +62,16 @@ final class TestAppBox {
 }
 
 @discardableResult
-func makeTestApp() async throws -> Application {
-    var env = Environment(name: "testing", arguments: ["App"])
+func makeTestApp(databaseValues: [String: String]? = nil) async throws -> Application {
+    let env = Environment(name: "testing", arguments: ["App"])
     let app = try await Application.make(env)
-    try await configure(app)
+    // Tests must not inherit a developer DATABASE_URL/DB_DRIVER; use the test DB.
+    var values = ProcessInfo.processInfo.environment
+    values.removeValue(forKey: "DATABASE_URL")
+    values.removeValue(forKey: "DB_DRIVER")
+    values.removeValue(forKey: "SQLITE_PATH")
+    values["POSTGRES_DB"] = "mealplanner_test"
+    try await configure(app, databaseValues: databaseValues ?? values)
     try await app.autoMigrate()
     app.emailSender = CapturingEmailSender()
     app.appleTokenVerifier = FakeAppleVerifier()
@@ -142,6 +148,34 @@ func apiRequest<T: Decodable>(
     }
 }
 
+func apiResponse(
+    _ app: Application,
+    _ method: HTTPMethod,
+    _ path: String,
+    headers: [String: String] = [:],
+    body: (any Encodable)? = nil,
+    expected: HTTPResponseStatus = .ok
+) async throws -> XCTHTTPResponse {
+    var buffer: ByteBuffer?
+    if let body {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        buffer = ByteBuffer(data: try encoder.encode(body))
+    }
+    var result: XCTHTTPResponse?
+    try await app.test(
+        method,
+        path,
+        headers: HTTPHeaders(headers.map { ($0.key, $0.value) }),
+        body: buffer
+    ) { (response: XCTHTTPResponse) async throws in
+        #expect(response.status == expected, "Unexpected status for \(method) \(path): \(response.status)")
+        result = response
+    }
+    guard let result else { throw TestError.noResponse }
+    return result
+}
+
 func apiStatus(
     _ app: Application,
     _ method: HTTPMethod,
@@ -194,6 +228,36 @@ func signIn(_ app: Application, email: String = "user@example.com", deviceID: UU
         headers: ["Content-Type": "application/json"],
         body: VerifyBody(token: token, email: email, client: "ios", deviceID: deviceID)
     )
+}
+
+func makeAdmin(app: Application, email: String = "admin@example.com") async throws -> UserModel {
+    let user = UserModel(email: email, displayName: "Admin", isAdmin: true)
+    try await user.save(on: app.db)
+    return user
+}
+
+func adminCookie(_ app: Application, email: String) async throws -> String {
+    struct Body: Encodable { var email: String; var csrf: String = "none" }
+    try await apiStatus(
+        app, .POST, "/admin/login",
+        headers: ["Content-Type": "application/json"],
+        body: Body(email: email)
+    )
+
+    guard let link = (app.emailSender as? CapturingEmailSender)?.lastLink() else {
+        throw TestError.noMagicLink
+    }
+    let components = URLComponents(url: link, resolvingAgainstBaseURL: false)!
+    let token = components.queryItems!.first { $0.name == "token" }!.value!
+
+    var cookieValue: String?
+    try await app.test(.GET, "/admin/verify?token=\(token)&email=\(email)") { (response: XCTHTTPResponse) async throws in
+        #expect(response.status == .found)
+        let setCookie = response.headers[.setCookie].first ?? ""
+        cookieValue = setCookie.split(separator: ";").first.map(String.init)
+    }
+    guard let cookieValue else { throw TestError.noResponse }
+    return cookieValue
 }
 
 func authHeaders(_ pair: TokenPair) -> [String: String] {

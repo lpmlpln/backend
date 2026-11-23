@@ -95,7 +95,8 @@ struct AuthService: Sendable {
         )
         try await record.save(on: db)
 
-        var components = URLComponents(string: "\(baseURL)/auth/verify")
+        let path = client == "admin" ? "admin" : "auth"
+        var components = URLComponents(string: "\(baseURL)/\(path)/verify")
         components?.queryItems = [
             URLQueryItem(name: "token", value: token),
             URLQueryItem(name: "email", value: email),

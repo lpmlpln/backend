@@ -135,7 +135,8 @@ struct OpenRouterRecipeExtractor: RecipeExtracting {
                      "ingredients": [{"raw": string, "name": string|null, "quantity": number|null, "unit": string|null}],
                      "instructions": [string], "cuisine": string|null, "dishType": string|null,
                      "mainIngredient": string|null, "dietaryTags": [string], "imageURLs": [string]}
-                    If a field is unknown use null. Do not invent ingredients.
+                    If an array is unknown use [] and if a scalar is unknown use null.
+                    Never use null for arrays. Do not invent ingredients.
                     """,
                 ],
                 ["role": "user", "content": String(text.prefix(30_000))],
@@ -166,10 +167,87 @@ struct OpenRouterRecipeExtractor: RecipeExtracting {
             throw AppError.importFailed("Recipe extraction returned an invalid response.")
         }
 
+        var draft = try Self.parseCompletion(contentData)
+
+        // Some models return null for arrays even when the page contains them.
+        // Fill the gaps from schema.org microdata when available.
+        let fallback = Self.microdataFallback(from: page.html)
+        if draft.ingredients.isEmpty {
+            draft.ingredients = fallback.ingredients.map {
+                ImportedIngredient(raw: $0, name: nil)
+            }
+        }
+        if draft.instructions.isEmpty {
+            draft.instructions = fallback.instructions
+        }
+        if (draft.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
+           let title = fallback.title {
+            draft.title = title
+        }
+
+        draft.sourceURL = page.url
+        return draft
+    }
+
+    /// Extracts schema.org microdata values used as a fallback for incomplete
+    /// model output. This is intentionally tolerant of malformed markup.
+    static func microdataFallback(from html: String) -> (ingredients: [String], instructions: [String], title: String?) {
+        func captured(_ pattern: String, in text: String) -> [String] {
+            guard let regex = try? NSRegularExpression(
+                pattern: pattern,
+                options: [.caseInsensitive, .dotMatchesLineSeparators]
+            ) else { return [] }
+            let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+            return matches.compactMap { match in
+                guard match.numberOfRanges > 1,
+                      let range = Range(match.range(at: 1), in: text)
+                else { return nil }
+                return stripTags(String(text[range]))
+            }
+        }
+
+        func stripTags(_ value: String) -> String {
+            var text = value.replacingOccurrences(
+                of: "<[^>]+>", with: " ", options: [.regularExpression]
+            )
+            text = text
+                .replacingOccurrences(of: "&nbsp;", with: " ")
+                .replacingOccurrences(of: "&amp;", with: "&")
+                .replacingOccurrences(of: "&#39;", with: "'")
+                .replacingOccurrences(of: "&quot;", with: "\"")
+            return text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        }
+
+        let ingredients = captured(
+            "itemprop=[\"']recipeIngredient[\"'][^>]*>(.*?)<\\/span>",
+            in: html
+        ).filter { !$0.isEmpty }
+
+        var instructions: [String] = []
+        if let regex = try? NSRegularExpression(
+            pattern: "itemprop=[\"']recipeInstructions[\"'][^>]*>",
+            options: [.caseInsensitive]
+        ), let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)) {
+            let start = match.range.upperBound
+            let length = min(20_000, (html as NSString).length - start)
+            if length > 0, let range = Range(NSRange(location: start, length: length), in: html) {
+                instructions = captured("<p[^>]*>(.*?)<\\/p>", in: String(html[range]))
+                    .filter { $0.count > 10 }
+                    .prefix(20)
+                    .map { $0 }
+            }
+        }
+
+        let title = captured("<h1[^>]*itemprop=[\"']name[\"'][^>]*>(.*?)<\\/h1>", in: html).first
+        return (ingredients, instructions, title)
+    }
+
+    /// Decodes the model's JSON tolerantly: null arrays become empty arrays,
+    /// and numbers may arrive as strings (e.g. `"quantity": "2"`).
+    static func parseCompletion(_ data: Data) throws -> ImportedRecipeDraft {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
-        let partial = try decoder.decode(PartialDraft.self, from: contentData)
-
+        let partial = try decoder.decode(PartialDraft.self, from: data)
         return ImportedRecipeDraft(
             title: partial.title,
             description: partial.description,
@@ -189,8 +267,7 @@ struct OpenRouterRecipeExtractor: RecipeExtracting {
             dishType: partial.dishType,
             mainIngredient: partial.mainIngredient,
             dietaryTags: partial.dietaryTags,
-            imageURLs: partial.imageURLs.compactMap(URL.init(string:)),
-            sourceURL: page.url
+            imageURLs: partial.imageURLs.compactMap(URL.init(string:))
         )
     }
 
@@ -200,13 +277,59 @@ struct OpenRouterRecipeExtractor: RecipeExtracting {
         var servings: Int?
         var prepMinutes: Int?
         var cookMinutes: Int?
-        var ingredients: [PartialIngredient] = []
-        var instructions: [String] = []
+        var ingredients: [PartialIngredient]
+        var instructions: [String]
         var cuisine: String?
         var dishType: String?
         var mainIngredient: String?
-        var dietaryTags: [String] = []
-        var imageURLs: [String] = []
+        var dietaryTags: [String]
+        var imageURLs: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case title, description, servings, prepMinutes, cookMinutes
+            case ingredients, instructions, cuisine, dishType, mainIngredient
+            case dietaryTags, imageURLs
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            title = try container.decodeIfPresent(String.self, forKey: .title)
+            description = try container.decodeIfPresent(String.self, forKey: .description)
+            servings = Self.flexibleInt(in: container, forKey: .servings)
+            prepMinutes = Self.flexibleInt(in: container, forKey: .prepMinutes)
+            cookMinutes = Self.flexibleInt(in: container, forKey: .cookMinutes)
+            ingredients = Self.array(in: container, forKey: .ingredients)
+            instructions = Self.array(in: container, forKey: .instructions)
+            cuisine = try container.decodeIfPresent(String.self, forKey: .cuisine)
+            dishType = try container.decodeIfPresent(String.self, forKey: .dishType)
+            mainIngredient = try container.decodeIfPresent(String.self, forKey: .mainIngredient)
+            dietaryTags = Self.array(in: container, forKey: .dietaryTags)
+            imageURLs = Self.array(in: container, forKey: .imageURLs)
+        }
+
+        private static func array<T: Decodable>(
+            in container: KeyedDecodingContainer<CodingKeys>,
+            forKey key: CodingKeys
+        ) -> [T] {
+            (try? container.decodeIfPresent([T].self, forKey: key)) ?? []
+        }
+
+        private static func flexibleInt(
+            in container: KeyedDecodingContainer<CodingKeys>,
+            forKey key: CodingKeys
+        ) -> Int? {
+            if let value = try? container.decodeIfPresent(Int.self, forKey: key) {
+                return value
+            }
+            if let string = try? container.decodeIfPresent(String.self, forKey: key),
+               let value = Int(string.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                return value
+            }
+            if let double = try? container.decodeIfPresent(Double.self, forKey: key), double.isFinite {
+                return Int(double)
+            }
+            return nil
+        }
     }
 
     private struct PartialIngredient: Decodable {
@@ -214,6 +337,40 @@ struct OpenRouterRecipeExtractor: RecipeExtracting {
         var name: String?
         var quantity: Decimal?
         var unit: String?
+
+        enum CodingKeys: String, CodingKey {
+            case raw, name, quantity, unit
+        }
+
+        init(from decoder: Decoder) throws {
+            // Some models return plain strings instead of objects.
+            if let single = try? decoder.singleValueContainer(),
+               let text = try? single.decode(String.self) {
+                raw = text
+                name = nil
+                quantity = nil
+                unit = nil
+                return
+            }
+
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let rawText = try container.decodeIfPresent(String.self, forKey: .raw) ?? ""
+            let nameText = try container.decodeIfPresent(String.self, forKey: .name)
+            raw = rawText.isEmpty ? (nameText ?? "") : rawText
+            name = nameText
+
+            if let value = try? container.decodeIfPresent(Decimal.self, forKey: .quantity) {
+                quantity = value
+            } else if let text = try? container.decodeIfPresent(String.self, forKey: .quantity) {
+                quantity = Decimal(string: text.trimmingCharacters(in: .whitespacesAndNewlines))
+            } else if let double = try? container.decodeIfPresent(Double.self, forKey: .quantity) {
+                quantity = Decimal(double)
+            } else {
+                quantity = nil
+            }
+
+            unit = try container.decodeIfPresent(String.self, forKey: .unit)
+        }
     }
 
     private static func visibleText(from html: String) -> String {
