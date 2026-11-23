@@ -14,7 +14,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/jwt-kit.git", from: "5.1.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
         .package(url: "https://github.com/vapor/sql-kit.git", from: "3.7.0"),
-        .package(url: "https://github.com/lpmlpln/swift-core.git", branch: "main"),
+        .package(url: "https://github.com/lpmlpln/swift-core", branch: "main"),
         // Provides `swift package --disable-sandbox vercel` and the Vercel
         // executable runtime bootstrap. No source import is required.
         .package(url: "https://github.com/vercel-labs/swift-vercel-runtime.git", from: "0.6.1"),

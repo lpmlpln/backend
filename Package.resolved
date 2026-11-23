@@ -202,7 +202,7 @@
     {
       "identity" : "swift-core",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/lpmlpln/swift-core.git",
+      "location" : "https://github.com/lpmlpln/swift-core",
       "state" : {
         "branch" : "main",
         "revision" : "044451bc0a64f0cc9464cba761f8a35c1326c4a9"
