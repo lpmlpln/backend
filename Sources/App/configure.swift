@@ -8,7 +8,13 @@ import Vapor
 
 extension Application {
     var appBaseURL: String {
-        Environment.get("APP_BASE_URL") ?? "http://localhost:8080"
+        if let url = Environment.get("APP_BASE_URL"), !url.isEmpty { return url }
+        // Vercel sets VERCEL_URL for every deployment. Use it so magic links
+        // point at the deployed API instead of localhost.
+        if let host = Environment.get("VERCEL_URL"), !host.isEmpty {
+            return "https://\(host)"
+        }
+        return "http://localhost:8080"
     }
 
     var accessTTL: Int {
@@ -97,7 +103,22 @@ enum ImportServiceKey: StorageKey { typealias Value = ImportService }
 /// to local development and tests.
 enum AppDatabase {
     static func configure(_ app: Application, values: [String: String]) throws {
+        // Vercel functions have an ephemeral filesystem. A local SQLite file
+        // would be lost between invocations, so require an external database.
+        if values["VERCEL"] == "1",
+           values["DB_DRIVER"]?.lowercased() != "sqlite",
+           (values["DATABASE_URL"] ?? "").isEmpty {
+            throw AppError.validation(
+                "DATABASE_URL must be set to a PostgreSQL connection string on Vercel."
+            )
+        }
+
         if values["DB_DRIVER"]?.lowercased() == "sqlite" {
+            if values["VERCEL"] == "1" {
+                throw AppError.validation(
+                    "SQLite cannot be used on Vercel; unset DB_DRIVER and set DATABASE_URL to PostgreSQL."
+                )
+            }
             app.databases.use(
                 .sqlite(sqliteConfiguration(path: values["SQLITE_PATH"])),
                 as: .sqlite
@@ -107,6 +128,11 @@ enum AppDatabase {
 
         if let url = values["DATABASE_URL"], !url.isEmpty {
             if let configuration = sqliteConfiguration(from: url) {
+                if values["VERCEL"] == "1" {
+                    throw AppError.validation(
+                        "SQLite cannot be used on Vercel; set DATABASE_URL to PostgreSQL."
+                    )
+                }
                 app.databases.use(.sqlite(configuration), as: .sqlite)
             } else {
                 app.databases.use(try .postgres(url: url), as: .psql)
@@ -192,11 +218,15 @@ public func configure(_ app: Application, databaseValues: [String: String]? = ni
     try await registerRoutes(app)
 
     if app.environment != .testing {
-        try await app.autoMigrate()
-        try await AdminBootstrap.ensureInitialAdmin(
-            on: app.db,
-            email: Environment.get("INITIAL_ADMIN_EMAIL"),
-            logger: app.logger
-        )
+        // Fluent migrations are idempotent, but on serverless platforms it is
+        // useful to opt out after the schema exists (RUN_MIGRATIONS=false).
+        if Environment.get("RUN_MIGRATIONS")?.lowercased() != "false" {
+            try await app.autoMigrate()
+            try await AdminBootstrap.ensureInitialAdmin(
+                on: app.db,
+                email: Environment.get("INITIAL_ADMIN_EMAIL"),
+                logger: app.logger
+            )
+        }
     }
 }

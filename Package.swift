@@ -1,10 +1,10 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.4
 import PackageDescription
 
 let package = Package(
     name: "mealplanner-api",
     platforms: [
-        .macOS(.v14),
+        .macOS(.v15),
     ],
     dependencies: [
         .package(url: "https://github.com/vapor/vapor.git", from: "4.115.0"),
@@ -15,6 +15,9 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
         .package(url: "https://github.com/vapor/sql-kit.git", from: "3.7.0"),
         .package(url: "https://github.com/lpmlpln/swift-core.git", branch: "main"),
+        // Provides `swift package --disable-sandbox vercel` and the Vercel
+        // executable runtime bootstrap. No source import is required.
+        .package(url: "https://github.com/vercel-labs/swift-vercel-runtime.git", from: "0.6.1"),
     ],
     targets: [
         .executableTarget(

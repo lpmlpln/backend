@@ -1,0 +1,4 @@
+{
+  "installCommand": "curl -fsSL https://raw.githubusercontent.com/vercel-labs/swift-vercel-runtime/0.6.1/scripts/vercel-install-swift.sh | bash",
+  "buildCommand": ".vercel/bin/swift package --disable-sandbox vercel --product App"
+}

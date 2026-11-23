@@ -1,5 +1,5 @@
 {
-  "originHash" : "48fe4481445bdae8c2338f83e70f0e7fa364f38b11e569033f7fdf7ad866cbc0",
+  "originHash" : "c240d3e786d7791986b972f074301eff3f64914d4cacebce49e1f358cd311c9a",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -341,6 +341,15 @@
       "state" : {
         "revision" : "640e5755b5826f4437eaeedd366fd776737db62c",
         "version" : "1.9.0"
+      }
+    },
+    {
+      "identity" : "swift-vercel-runtime",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/vercel-labs/swift-vercel-runtime.git",
+      "state" : {
+        "revision" : "a7d44bf1068337fe24e86c2124340cc45ef57513",
+        "version" : "0.6.1"
       }
     },
     {
