@@ -57,7 +57,7 @@ admin magic link.
 
 The API is built with the official
 [Swift Vercel runtime](https://github.com/vercel-labs/swift-vercel-runtime).
-`vercel.json` installs the swift.org 6.4.0 toolchain plus the Static Linux SDK
+`vercel.json` installs the swift.org 6.4.3 toolchain plus the matching Static Linux SDK
 and runs `swift package --disable-sandbox vercel`, which produces a static
 binary served by Vercel's native `executable` runtime. No Docker or Node adapter
 is involved.
@@ -94,6 +94,13 @@ separate worker) for production imports.
 The first build downloads about 1.4 GB of toolchain/SDK and takes several
 minutes; later builds restore the toolchain and `.build` from Vercel's cache.
 `.vercel/` is gitignored.
+
+Swift 6.4.0's SwiftPM crashed during build planning on Vercel's x86_64 Amazon
+Linux 2023 image (`GlobalProductPlan.computeModuleInfo` / libdispatch
+`Signal 11`). This project pins 6.4.3 in `.swift-version` to avoid that
+toolchain bug. If the crash reappears, try a newer 6.4.x release by changing
+only `.swift-version`; the cache is keyed by Swift version, so the next build
+will be a cold one.
 
 ## Docker
 
