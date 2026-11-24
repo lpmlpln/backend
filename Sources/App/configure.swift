@@ -120,7 +120,7 @@ enum AppDatabase {
                 )
             }
             app.databases.use(
-                .sqlite(sqliteConfiguration(path: values["SQLITE_PATH"])),
+                .sqlite(sqliteConfiguration(path: values["SQLITE_PATH"]?.trimmingCharacters(in: .whitespaces))),
                 as: .sqlite
             )
             return
@@ -156,7 +156,7 @@ enum AppDatabase {
         // No explicit configuration in development: use a local SQLite file so
         // `swift run App` works without a PostgreSQL server.
         app.databases.use(
-            .sqlite(sqliteConfiguration(path: values["SQLITE_PATH"])),
+            .sqlite(sqliteConfiguration(path: values["SQLITE_PATH"]?.trimmingCharacters(in: .whitespaces))),
             as: .sqlite
         )
     }
