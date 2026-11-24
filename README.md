@@ -95,6 +95,11 @@ The first build downloads about 1.4 GB of toolchain/SDK and takes several
 minutes; later builds restore the toolchain and `.build` from Vercel's cache.
 `.vercel/` is gitignored.
 
+All outbound HTTP (SMTP2GO, Apple JWKS, page fetching and OpenRouter) uses
+Vapor's `Client` (AsyncHTTPClient), not `URLSession`. Foundation's networking
+types live in a separate `FoundationNetworking` module on Linux and are
+problematic in fully static musl binaries.
+
 Swift 6.4.0's SwiftPM crashed during build planning on Vercel's x86_64 Amazon
 Linux 2023 image (`GlobalProductPlan.computeModuleInfo` / libdispatch
 `Signal 11`). This project pins 6.4.3 in `.swift-version` to avoid that

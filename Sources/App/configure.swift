@@ -37,6 +37,7 @@ extension Application {
     private var defaultEmailSender: any EmailSender {
         if let key = Environment.get("SMTP2GO_API_KEY"), !key.isEmpty {
             return SMTP2GOEmailSender(
+                client: client,
                 apiKey: key,
                 from: Environment.get("EMAIL_FROM") ?? "MealPlanner <login@example.com>"
             )
@@ -58,7 +59,8 @@ extension Application {
         _ = (team, keyID, privateKey)
         return RemoteAppleTokenVerifier(
             jwksURL: URL(string: "https://appleid.apple.com/auth/keys")!,
-            audience: bundleID
+            audience: bundleID,
+            client: client
         )
     }
 
@@ -70,10 +72,11 @@ extension Application {
     private var defaultImportService: ImportService {
         ImportService(
             db: db,
-            fetcher: SafePageFetcher(),
+            fetcher: SafePageFetcher(client: client),
             extractor: OpenRouterRecipeExtractor(
                 apiKey: Environment.get("OPENROUTER_API_KEY") ?? "",
-                model: Environment.get("OPENROUTER_MODEL") ?? "openai/gpt-5-mini"
+                model: Environment.get("OPENROUTER_MODEL") ?? "openai/gpt-5-mini",
+                client: client
             ),
             imageStorage: SpacesImageStorage(
                 endpoint: URL(string: Environment.get("SPACES_ENDPOINT") ?? "https://fra1.digitaloceanspaces.com")!,

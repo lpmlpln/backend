@@ -42,10 +42,12 @@ enum SSRFGuard {
 }
 
 struct SafePageFetcher: PageFetching {
+    let client: any Client
     let maxBytes: Int
     let timeoutSeconds: TimeInterval
 
-    init(maxBytes: Int = 5_000_000, timeoutSeconds: TimeInterval = 20) {
+    init(client: any Client, maxBytes: Int = 5_000_000, timeoutSeconds: TimeInterval = 20) {
+        self.client = client
         self.maxBytes = maxBytes
         self.timeoutSeconds = timeoutSeconds
     }
@@ -55,27 +57,26 @@ struct SafePageFetcher: PageFetching {
             throw AppError.importFailed("This URL cannot be imported.")
         }
 
-        var request = URLRequest(url: url)
-        request.timeoutInterval = timeoutSeconds
-        request.setValue("MealPlanner/1.0 (+https://mealplanner.example.com)", forHTTPHeaderField: "User-Agent")
-
         var current = url
         for _ in 0..<5 {
             guard SSRFGuard.isAllowed(current) else {
                 throw AppError.importFailed("This URL redirects to a blocked address.")
             }
-            request.url = current
-            let (data, response) = try await URLSession.shared.data(for: request)
-            if let http = response as? HTTPURLResponse {
-                guard (200..<400).contains(http.statusCode) else {
-                    throw AppError.importFailed("The recipe page returned HTTP \(http.statusCode).")
-                }
-                if (300..<400).contains(http.statusCode), let location = http.value(forHTTPHeaderField: "Location"),
-                   let redirect = URL(string: location, relativeTo: current)?.absoluteURL {
-                    current = redirect
-                    continue
-                }
+            let response = try await client.get(
+                URI(string: current.absoluteString),
+                headers: ["User-Agent": "MealPlanner/1.0 (+https://mealplanner.example.com)"]
+            ).get()
+            let statusCode = response.status.code
+            guard (200..<400).contains(statusCode) else {
+                throw AppError.importFailed("The recipe page returned HTTP \(statusCode).")
             }
+            if (300..<400).contains(statusCode),
+               let location = response.headers.first(name: .location),
+               let redirect = URL(string: location, relativeTo: current)?.absoluteURL {
+                current = redirect
+                continue
+            }
+            let data = response.body.map { Data($0.readableBytesView) } ?? Data()
             guard data.count <= maxBytes else {
                 throw AppError.importFailed("The recipe page is too large.")
             }
@@ -104,17 +105,17 @@ protocol RecipeExtracting: Sendable {
 }
 
 /// Calls OpenRouter with structured JSON output and validates the response.
-struct OpenRouterRecipeExtractor: RecipeExtracting {
+final class OpenRouterRecipeExtractor: RecipeExtracting, @unchecked Sendable {
     let apiKey: String
     let model: String
     let endpoint: URL
-    let session: URLSession
+    let client: any Client
 
-    init(apiKey: String, model: String = "openai/gpt-5-mini", endpoint: URL? = nil, session: URLSession = .shared) {
+    init(apiKey: String, model: String = "openai/gpt-5-mini", endpoint: URL? = nil, client: any Client) {
         self.apiKey = apiKey
         self.model = model
         self.endpoint = endpoint ?? URL(string: "https://openrouter.ai/api/v1/chat/completions")!
-        self.session = session
+        self.client = client
     }
 
     func extract(from page: FetchedPage) async throws -> ImportedRecipeDraft {
@@ -144,20 +145,27 @@ struct OpenRouterRecipeExtractor: RecipeExtracting {
             "response_format": ["type": "json_object"],
         ]
 
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("https://mealplanner.example.com", forHTTPHeaderField: "HTTP-Referer")
-        request.setValue("MealPlanner", forHTTPHeaderField: "X-Title")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let bodyData = try JSONSerialization.data(withJSONObject: body)
+        var buffer = ByteBufferAllocator().buffer(capacity: bodyData.count)
+        buffer.writeBytes(bodyData)
 
-        let (data, response) = try await session.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let response = try await client.post(
+            URI(string: endpoint.absoluteString),
+            headers: [
+                "Content-Type": "application/json",
+                "Authorization": "Bearer \(apiKey)",
+                "HTTP-Referer": "https://mealplanner.example.com",
+                "X-Title": "MealPlanner",
+            ],
+            beforeSend: { $0.body = buffer }
+        ).get()
+
+        let status = response.status.code
         guard (200..<300).contains(status) else {
             throw AppError.importFailed("Recipe extraction failed (HTTP \(status)).")
         }
 
+        let data = response.body.map { Data($0.readableBytesView) } ?? Data()
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard let choices = json?["choices"] as? [[String: Any]],
               let message = choices.first?["message"] as? [String: Any],

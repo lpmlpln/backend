@@ -314,10 +314,14 @@ struct RemoteAppleTokenVerifier: AppleTokenVerifier {
 
     let jwksURL: URL
     let audience: String
+    let client: any Client
 
     func verify(_ identityToken: String, nonce: String) async throws -> AppleIdentity {
-        let (data, _) = try await URLSession.shared.data(from: jwksURL)
-        let json = String(data: data, encoding: .utf8) ?? ""
+        let response = try await client.get(URI(string: jwksURL.absoluteString)).get()
+        guard (200..<300).contains(response.status.code) else {
+            throw AppError.appleTokenInvalid
+        }
+        let json = response.body.map { String(buffer: $0) } ?? ""
         let keys = JWTKeyCollection()
         try await keys.add(jwksJSON: json)
 
