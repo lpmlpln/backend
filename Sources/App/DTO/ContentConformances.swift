@@ -2,46 +2,46 @@ import Foundation
 import MealPlannerCore
 import Vapor
 
-extension UserDTO: Content {}
-extension TokenPair: Content {}
-extension MagicLinkRequest: Content {}
-extension MagicLinkResponse: Content {}
-extension AppleSignInRequest: Content {}
-extension RefreshRequest: Content {}
-extension DeviceRegistration: Content {}
+extension UserDTO: @retroactive Content {}
+extension TokenPair: @retroactive Content {}
+extension MagicLinkRequest: @retroactive Content {}
+extension MagicLinkResponse: @retroactive Content {}
+extension AppleSignInRequest: @retroactive Content {}
+extension RefreshRequest: @retroactive Content {}
+extension DeviceRegistration: @retroactive Content {}
 
-extension RecipeDTO: Content {}
-extension IngredientDTO: Content {}
-extension RecipeImageDTO: Content {}
-extension PersonalizationDTO: Content {}
-extension RecipeCreateRequest: Content {}
-extension RecipeImportRequest: Content {}
-extension RecipeImportResponse: Content {}
-extension ImportJobDTO: Content {}
-extension PlanEntryUpdateRequest: Content {}
+extension RecipeDTO: @retroactive Content {}
+extension IngredientDTO: @retroactive Content {}
+extension RecipeImageDTO: @retroactive Content {}
+extension PersonalizationDTO: @retroactive Content {}
+extension RecipeCreateRequest: @retroactive Content {}
+extension RecipeImportRequest: @retroactive Content {}
+extension RecipeImportResponse: @retroactive Content {}
+extension ImportJobDTO: @retroactive Content {}
+extension PlanEntryUpdateRequest: @retroactive Content {}
 extension FriendRequestLike: Content {}
 extension LockRequest: Content {}
-extension FriendRequest: Content {}
+extension FriendRequest: @retroactive Content {}
 
 struct RecipeListResponse: Content {
     var items: [RecipeDTO]
     var nextCursor: String?
 }
 
-extension PlanDTO: Content {}
-extension PlanEntryDTO: Content {}
-extension PlanMemberDTO: Content {}
-extension PlanCreateRequest: Content {}
-extension PlanUpdateRequest: Content {}
-extension RecalculateRequest: Content {}
-extension PlanMemberRequest: Content {}
-extension ShoppingListDTO: Content {}
-extension ShoppingItemDTO: Content {}
-extension ShoppingCheckRequest: Content {}
+extension PlanDTO: @retroactive Content {}
+extension PlanEntryDTO: @retroactive Content {}
+extension PlanMemberDTO: @retroactive Content {}
+extension PlanCreateRequest: @retroactive Content {}
+extension PlanUpdateRequest: @retroactive Content {}
+extension RecalculateRequest: @retroactive Content {}
+extension PlanMemberRequest: @retroactive Content {}
+extension ShoppingListDTO: @retroactive Content {}
+extension ShoppingItemDTO: @retroactive Content {}
+extension ShoppingCheckRequest: @retroactive Content {}
 
-extension FriendDTO: Content {}
+extension FriendDTO: @retroactive Content {}
 
-extension SyncPullResponse: Content {}
-extension SyncPushRequest: Content {}
-extension SyncPushResponse: Content {}
-extension APIErrorBody: Content {}
+extension SyncPullResponse: @retroactive Content {}
+extension SyncPushRequest: @retroactive Content {}
+extension SyncPushResponse: @retroactive Content {}
+extension APIErrorBody: @retroactive Content {}

@@ -166,7 +166,7 @@ struct AdminController: Sendable {
         )
         try await session.save(on: request.db)
 
-        var response = Response(status: .found, headers: ["Location": "/admin"], body: .empty)
+        let response = Response(status: .found, headers: ["Location": "/admin"], body: .empty)
         response.cookies["mp_admin"] = HTTPCookies.Value(
             string: sessionToken,
             expires: Date().addingTimeInterval(8 * 3_600),
@@ -188,7 +188,7 @@ struct AdminController: Sendable {
                 try await session.delete(on: request.db)
             }
         }
-        var response = Response(status: .found, headers: ["Location": "/admin/login"], body: .empty)
+        let response = Response(status: .found, headers: ["Location": "/admin/login"], body: .empty)
         response.cookies["mp_admin"] = .expired
         return response
     }

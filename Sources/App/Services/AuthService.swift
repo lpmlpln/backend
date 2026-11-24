@@ -32,7 +32,7 @@ actor JWTManager {
     private let keys: JWTKeyCollection
 
     init(secret: String) async {
-        let keys = await JWTKeyCollection()
+        let keys = JWTKeyCollection()
         await keys.add(hmac: HMACKey(from: secret), digestAlgorithm: .sha256)
         self.keys = keys
     }
@@ -318,7 +318,7 @@ struct RemoteAppleTokenVerifier: AppleTokenVerifier {
     func verify(_ identityToken: String, nonce: String) async throws -> AppleIdentity {
         let (data, _) = try await URLSession.shared.data(from: jwksURL)
         let json = String(data: data, encoding: .utf8) ?? ""
-        let keys = await JWTKeyCollection()
+        let keys = JWTKeyCollection()
         try await keys.add(jwksJSON: json)
 
         let payload = try await keys.verify(

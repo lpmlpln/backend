@@ -291,7 +291,7 @@ struct OpenRouterRecipeExtractor: RecipeExtracting {
             case dietaryTags, imageURLs
         }
 
-        init(from decoder: Decoder) throws {
+        init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             title = try container.decodeIfPresent(String.self, forKey: .title)
             description = try container.decodeIfPresent(String.self, forKey: .description)
@@ -342,7 +342,7 @@ struct OpenRouterRecipeExtractor: RecipeExtracting {
             case raw, name, quantity, unit
         }
 
-        init(from decoder: Decoder) throws {
+        init(from decoder: any Decoder) throws {
             // Some models return plain strings instead of objects.
             if let single = try? decoder.singleValueContainer(),
                let text = try? single.decode(String.self) {
@@ -475,7 +475,7 @@ struct ImportService: Sendable {
             job.status = "saving_images"
             try await job.save(on: db)
 
-            var imported = try ImportValidator.validate(
+            let imported = try ImportValidator.validate(
                 draft,
                 ownerID: job.$user.id,
                 recipeID: UUID()

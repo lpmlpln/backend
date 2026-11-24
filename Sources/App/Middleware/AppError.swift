@@ -76,7 +76,7 @@ struct ErrorMiddleware: AsyncMiddleware {
                 message: error.reason
             )
             return makeResponse(appError, request: request)
-        } catch let error as DecodingError {
+        } catch is DecodingError {
             return makeResponse(.validation("Invalid request body."), request: request)
         } catch {
             request.logger.report(error: error)
@@ -99,7 +99,7 @@ struct RequestIDMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         let id = request.headers.first(name: "X-Request-ID") ?? UUID().uuidString
         request.storage[RequestIDKey.self] = id
-        var response = try await next.respond(to: request)
+        let response = try await next.respond(to: request)
         response.headers.replaceOrAdd(name: "X-Request-ID", value: id)
         return response
     }
