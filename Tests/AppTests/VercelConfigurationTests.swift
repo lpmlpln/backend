@@ -48,4 +48,16 @@ struct VercelConfigurationTests {
             try await app.asyncShutdown()
         })
     }
+
+    @Test("Vercel Postgres POSTGRES_URL is accepted as a fallback")
+    func acceptsVercelPostgresURL() async throws {
+        try await testGate.run(TestBody {
+            let app = try await Application.make(Environment(name: "testing", arguments: ["App"]))
+            try AppDatabase.configure(app, values: [
+                "VERCEL": "1",
+                "POSTGRES_URL": "postgres://mealplanner:mealplanner@localhost:5432/mealplanner_test",
+            ])
+            try await app.asyncShutdown()
+        })
+    }
 }

@@ -65,15 +65,36 @@ is involved.
 1. Create a Vercel project with **Root Directory** = `mealplanner-api` and
    **Framework Preset** = `Other`.
 2. Add environment variables in the Vercel dashboard:
-   - `DATABASE_URL` — **required**, a PostgreSQL connection string. SQLite and
-     an unset `DATABASE_URL` are rejected on Vercel because the filesystem is
-     ephemeral.
+   - `DATABASE_URL` — **required**, a PostgreSQL connection string. Vercel
+     Postgres' `POSTGRES_URL` is also accepted. Set it for **Production and
+     Preview** environments; SQLite and a missing URL are rejected because the
+     filesystem is ephemeral.
    - `JWT_SECRET`, `APPLE_TEAM_ID`, `APPLE_BUNDLE_ID`, `APPLE_KEY_ID`,
      `APPLE_PRIVATE_KEY`, `SMTP2GO_API_KEY`, `EMAIL_FROM`, `OPENROUTER_API_KEY`,
      `SPACES_*`, `INITIAL_ADMIN_EMAIL`.
    - `VAPOR_ENV=production` (otherwise Vapor exposes error details).
    - `RUN_MIGRATIONS=false` after the initial deployment if you prefer to run
-     migrations separately; leave it unset for the first deploy.
+     migrations separately; leave it unset for the first deploy. Migrations are
+     serialized with a PostgreSQL transaction-scoped advisory lock, so
+     concurrent cold starts cannot race on `CREATE TABLE`.
+
+If a previous failed deploy already created some tables but did not record them
+in `_fluent_migrations`, the lock cannot repair that drift. Use a fresh database
+for the first successful deploy, or mark the existing tables as applied:
+
+```sql
+INSERT INTO _fluent_migrations (id, name, batch, created_at, updated_at)
+SELECT gen_random_uuid(), m.name, 1, now(), now()
+FROM (VALUES
+  ('App.CreateUsers'), ('App.CreateUserDevices'), ('App.CreateMagicLinkTokens'),
+  ('App.CreateRefreshTokens'), ('App.CreateAdminSessions'),
+  ('App.CreateFriendTables'), ('App.CreateRecipes'), ('App.CreateImportJobs'),
+  ('App.CreatePlanningTables'), ('App.CreateAuditLogs')
+) AS m(name)
+WHERE NOT EXISTS (
+  SELECT 1 FROM _fluent_migrations WHERE name = m.name
+);
+```
    - Private `swift-core` repository: set `CORE_REPO_TOKEN` in CI, or configure
      Git credentials on the build machine.
 3. Deploy with Git or locally:

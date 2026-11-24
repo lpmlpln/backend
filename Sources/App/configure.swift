@@ -4,6 +4,7 @@ import FluentSQLiteDriver
 import Foundation
 import JWTKit
 import MealPlannerCore
+import SQLKit
 import Vapor
 
 extension Application {
@@ -95,7 +96,8 @@ enum ImportServiceKey: StorageKey { typealias Value = ImportService }
 ///
 /// Resolution order:
 /// 1. `DB_DRIVER=sqlite` — SQLite at `SQLITE_PATH` (`:memory:` supported).
-/// 2. `DATABASE_URL` — a `sqlite:` URL selects SQLite, anything else PostgreSQL.
+/// 2. `DATABASE_URL` (or Vercel's `POSTGRES_URL`) — a `sqlite:` URL selects
+///    SQLite, anything else PostgreSQL.
 /// 3. Testing environment — PostgreSQL using `POSTGRES_*` variables.
 /// 4. Local development — SQLite at `SQLITE_PATH` or `mealplanner.sqlite`.
 ///
@@ -106,20 +108,28 @@ enum ImportServiceKey: StorageKey { typealias Value = ImportService }
 /// to local development and tests.
 enum AppDatabase {
     static func configure(_ app: Application, values: [String: String]) throws {
+        let databaseURL = values["DATABASE_URL"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let vercelPostgresURL = values["POSTGRES_URL"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedURL = [databaseURL, vercelPostgresURL]
+            .compactMap { $0 }
+            .first { !$0.isEmpty }
+
         // Vercel functions have an ephemeral filesystem. A local SQLite file
         // would be lost between invocations, so require an external database.
         if values["VERCEL"] == "1",
            values["DB_DRIVER"]?.lowercased() != "sqlite",
-           (values["DATABASE_URL"] ?? "").isEmpty {
+           resolvedURL == nil {
             throw AppError.validation(
-                "DATABASE_URL must be set to a PostgreSQL connection string on Vercel."
+                "DATABASE_URL (or POSTGRES_URL) must be set to a PostgreSQL connection string on Vercel."
             )
         }
 
         if values["DB_DRIVER"]?.lowercased() == "sqlite" {
             if values["VERCEL"] == "1" {
                 throw AppError.validation(
-                    "SQLite cannot be used on Vercel; unset DB_DRIVER and set DATABASE_URL to PostgreSQL."
+                    "SQLite cannot be used on Vercel; unset DB_DRIVER and set DATABASE_URL (or POSTGRES_URL) to PostgreSQL."
                 )
             }
             app.databases.use(
@@ -129,11 +139,11 @@ enum AppDatabase {
             return
         }
 
-        if let url = values["DATABASE_URL"], !url.isEmpty {
+        if let url = resolvedURL {
             if let configuration = sqliteConfiguration(from: url) {
                 if values["VERCEL"] == "1" {
                     throw AppError.validation(
-                        "SQLite cannot be used on Vercel; set DATABASE_URL to PostgreSQL."
+                        "SQLite cannot be used on Vercel; set DATABASE_URL (or POSTGRES_URL) to PostgreSQL."
                     )
                 }
                 app.databases.use(.sqlite(configuration), as: .sqlite)
@@ -220,16 +230,46 @@ public func configure(_ app: Application, databaseValues: [String: String]? = ni
 
     try await registerRoutes(app)
 
-    if app.environment != .testing {
-        // Fluent migrations are idempotent, but on serverless platforms it is
-        // useful to opt out after the schema exists (RUN_MIGRATIONS=false).
-        if Environment.get("RUN_MIGRATIONS")?.lowercased() != "false" {
-            try await app.autoMigrate()
+    try await runMigrationsIfNeeded(app)
+}
+
+/// Runs migrations (and the initial-admin bootstrap) with a PostgreSQL
+/// transaction-scoped advisory lock so concurrent serverless cold starts
+/// cannot race on `CREATE TABLE`.
+private func runMigrationsIfNeeded(_ app: Application) async throws {
+    guard app.environment != .testing else { return }
+    guard Environment.get("RUN_MIGRATIONS")?.lowercased() != "false" else { return }
+
+    let isPostgres = (app.db as? any SQLDatabase)?
+        .dialect.name.lowercased().contains("postgres") ?? false
+
+    if isPostgres {
+        try await app.db.transaction { db in
+            guard let sql = db as? any SQLDatabase else {
+                throw AppError.server("Could not acquire the migration lock.")
+            }
+            try await sql.raw("SELECT pg_advisory_xact_lock(724476795)").run()
+
+            let migrator = Migrator(
+                databaseFactory: { _ in db },
+                migrations: app.migrations,
+                on: app.eventLoopGroup.next()
+            )
+            try await migrator.setupIfNeeded().get()
+            try await migrator.prepareBatch().get()
+
             try await AdminBootstrap.ensureInitialAdmin(
-                on: app.db,
+                on: db,
                 email: Environment.get("INITIAL_ADMIN_EMAIL"),
                 logger: app.logger
             )
         }
+    } else {
+        try await app.autoMigrate()
+        try await AdminBootstrap.ensureInitialAdmin(
+            on: app.db,
+            email: Environment.get("INITIAL_ADMIN_EMAIL"),
+            logger: app.logger
+        )
     }
 }
