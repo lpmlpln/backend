@@ -122,7 +122,8 @@ struct AuthController: Sendable {
             throw AppError.validation("The sign-in link is missing parameters.")
         }
         let client = request.query[String.self, at: "client"] ?? "ios"
-        let callback = "mealplanner://auth/callback?token=\(token)&email=\(email)&client=\(client)"
+        let host = URL(string: request.application.appBaseURL)!.host()
+        let callback = "mealplanner://\(host)/auth/callback?token=\(token)&email=\(email)&client=\(client)"
         let html = """
         <html><body><p>Opening MealPlanner…</p>
         <script>window.location.href = "\(callback)";</script>
