@@ -62,6 +62,7 @@ struct AdminController: Sendable {
         routes.get("admin", "imports", "new", use: newImport)
         routes.post("admin", "imports", use: createImport)
         routes.post("admin", "imports", ":jobID", "retry", use: retryImport)
+        routes.post("admin", "imports", ":jobID", "run", use: runImport)
         routes.get("admin", "audit", use: audit)
     }
 
@@ -256,7 +257,9 @@ struct AdminController: Sendable {
             rows += """
             <tr><td>\(job.url)</td><td>\(job.status)</td><td>\(job.attempts)</td>
             <td>\(job.errorMessage ?? "")</td>
-            <td>\(form(action: "/admin/imports/\(id)/retry", csrf: csrf(request), button: "Retry"))</td></tr>
+            <td>\(job.status == "queued"
+                ? form(action: "/admin/imports/\(id)/run", csrf: csrf(request), button: "Run")
+                : form(action: "/admin/imports/\(id)/retry", csrf: csrf(request), button: "Retry"))</td></tr>
             """
         }
         let newImportLink = "<p><a href='/admin/imports/new'>New import</a></p>"
@@ -264,13 +267,39 @@ struct AdminController: Sendable {
     }
 
     @Sendable
+    func runImport(_ request: Request) async throws -> Response {
+        try await processImport(request, action: "admin.import.run", heading: "Import started", requireQueued: true)
+    }
+
+    @Sendable
     func retryImport(_ request: Request) async throws -> Response {
+        try await processImport(request, action: "admin.import.retry", heading: "Import retried", requireQueued: false)
+    }
+
+    private func processImport(
+        _ request: Request,
+        action: String,
+        heading: String,
+        requireQueued: Bool
+    ) async throws -> Response {
         let actor = try request.requireAdmin()
         try validateCSRF(request)
         guard let id = request.parameters.get("jobID", as: UUID.self) else { throw Abort(.notFound) }
-        let job = try await request.application.importService.process(jobID: id)
-        try await AuditLogModel(actorUserID: actor, action: "admin.import.retry", entityType: "import_job", entityID: id).save(on: request.db)
-        return page("Import retried", "<p>Status: \(job.status.rawValue)</p><a href='/admin/imports'>Back</a>")
+
+        if requireQueued {
+            guard let job = try await ImportJobModel.find(id, on: request.db), job.status == "queued" else {
+                throw Abort(.badRequest, reason: "Only queued imports can be started.")
+            }
+        }
+
+        let result = try await request.application.importService.process(jobID: id)
+        try await AuditLogModel(
+            actorUserID: actor,
+            action: action,
+            entityType: "import_job",
+            entityID: id
+        ).save(on: request.db)
+        return page(heading, "<p>Status: \(result.status.rawValue)</p><a href='/admin/imports'>Back</a>")
     }
 
     @Sendable

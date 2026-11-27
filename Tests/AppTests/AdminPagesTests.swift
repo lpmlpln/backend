@@ -188,6 +188,54 @@ struct AdminPagesTests {
         })
     }
 
+    @Test("Admin can run a queued import from the imports page")
+    func runQueuedImport() async throws {
+        try await testGate.run(TestBody {
+            let app = try await makeTestApp()
+            try await resetDatabase(app)
+            _ = try await makeAdmin(app: app)
+            let cookie = try await adminCookie(app, email: "admin@example.com")
+            app.importService = ImportService(
+                db: app.db,
+                fetcher: FakeFetcher(),
+                extractor: FakeExtractor(),
+                imageStorage: FakeImageStorage()
+            )
+
+            struct CreateBody: Encodable {
+                var url: String
+                var csrf: String
+            }
+            try await apiResponse(
+                app, .POST, "/admin/imports",
+                headers: headers(cookie),
+                body: CreateBody(url: "https://example.com/recipes/run-now", csrf: csrf(cookie))
+            )
+
+            let jobs = try await ImportJobModel.query(on: app.db).all()
+            let jobID = try jobs[0].requireID()
+
+            let list: XCTHTTPResponse = try await apiResponse(app, .GET, "/admin/imports", headers: ["Cookie": cookie])
+            #expect(list.body.string.contains("Run"))
+
+            let result: XCTHTTPResponse = try await apiResponse(
+                app, .POST, "/admin/imports/\(jobID.uuidString)/run",
+                headers: headers(cookie)
+            )
+            #expect(result.body.string.contains("Import started"))
+
+            let updated = try await ImportJobModel.find(jobID, on: app.db)
+            #expect(updated?.status == "completed")
+
+            let audit = try await AuditLogModel.query(on: app.db)
+                .filter(\.$action == "admin.import.run")
+                .first()
+            #expect(audit != nil)
+
+            try await app.asyncShutdown()
+        })
+    }
+
     @Test("Admin POST actions require CSRF")
     func csrfEnforced() async throws {
         try await testGate.run(TestBody {
