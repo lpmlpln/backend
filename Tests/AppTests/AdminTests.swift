@@ -71,6 +71,20 @@ struct AdminTests {
         })
     }
 
+    @Test("An invalid admin magic link redirects to login")
+    func invalidMagicLinkRedirect() async throws {
+        try await testGate.run(TestBody {
+            let app = try await makeTestApp()
+            try await resetDatabase(app)
+            let response: XCTHTTPResponse = try await apiResponse(
+                app, .GET, "/admin/verify?token=invalid&email=nobody@example.com",
+                expected: .found
+            )
+            #expect(response.headers[.location].first == "/admin/login")
+            try await app.asyncShutdown()
+        })
+    }
+
     @Test("Admin can access the dashboard and manage users")
     func adminFlow() async throws {
         try await testGate.run(TestBody {

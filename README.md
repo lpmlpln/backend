@@ -143,7 +143,7 @@ See `.env.example`. All secrets are environment variables; none are committed.
 
 ## Tests
 
-`swift test` runs 51 integration tests against real databases with
+`swift test` runs 52 integration tests against real databases with
 fake email, Apple, page-fetch, extraction and image-storage adapters. The admin
 UI is covered by the same suite; Playwright is added in the deployment phase.
 

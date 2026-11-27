@@ -68,8 +68,14 @@ struct ErrorMiddleware: AsyncMiddleware {
         do {
             return try await next.respond(to: request)
         } catch let error as AppError {
+            if let redirect = adminLoginRedirect(for: request, status: error.status) {
+                return redirect
+            }
             return makeResponse(error, request: request)
         } catch let error as any AbortError {
+            if let redirect = adminLoginRedirect(for: request, status: error.status) {
+                return redirect
+            }
             let appError = AppError(
                 .validation,
                 status: error.status,
@@ -82,6 +88,20 @@ struct ErrorMiddleware: AsyncMiddleware {
             request.logger.report(error: error)
             return makeResponse(.server(), request: request)
         }
+    }
+
+    /// The admin UI is browser-facing: an unauthorized response should send the
+    /// user to the login form rather than returning a JSON error payload.
+    private func adminLoginRedirect(for request: Request, status: HTTPResponseStatus) -> Response? {
+        let path = request.url.path
+        guard path == "/admin" || path.hasPrefix("/admin/"), status == .unauthorized else {
+            return nil
+        }
+        return Response(
+            status: .found,
+            headers: ["Location": "/admin/login"],
+            body: .empty
+        )
     }
 
     private func makeResponse(_ error: AppError, request: Request) -> Response {
