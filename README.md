@@ -107,6 +107,10 @@ vercel --prod
 
 Magic links use `VERCEL_URL` automatically unless `APP_BASE_URL` is set.
 
+Recipe extraction uses OpenRouter, then fills any missing fields from the
+page's schema.org JSON-LD (`@graph` / `Recipe`) or microdata. This keeps imports
+working when the model returns `null` arrays.
+
 Recipe imports run synchronously on the `POST /recipes/import/:jobID/run`
 endpoint. On Vercel this can exceed the default function duration on Hobby
 plans; increase the function's maximum duration (or run imports through a
@@ -143,7 +147,7 @@ See `.env.example`. All secrets are environment variables; none are committed.
 
 ## Tests
 
-`swift test` runs 52 integration tests against real databases with
+`swift test` runs 53 integration tests against real databases with
 fake email, Apple, page-fetch, extraction and image-storage adapters. The admin
 UI is covered by the same suite; Playwright is added in the deployment phase.
 

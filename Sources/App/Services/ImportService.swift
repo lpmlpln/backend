@@ -178,20 +178,29 @@ final class OpenRouterRecipeExtractor: RecipeExtracting, @unchecked Sendable {
         var draft = try Self.parseCompletion(contentData)
 
         // Some models return null for arrays even when the page contains them.
-        // Fill the gaps from schema.org microdata when available.
-        let fallback = Self.microdataFallback(from: page.html)
+        // Fill the gaps from schema.org structured data (JSON-LD first, then
+        // microdata) before giving up on the import.
+        let structured = RecipeStructuredData.extract(from: page.html)
+        let microdata = Self.microdataFallback(from: page.html)
+
         if draft.ingredients.isEmpty {
-            draft.ingredients = fallback.ingredients.map {
+            draft.ingredients = structured?.ingredients ?? microdata.ingredients.map {
                 ImportedIngredient(raw: $0, name: nil)
             }
         }
         if draft.instructions.isEmpty {
-            draft.instructions = fallback.instructions
+            draft.instructions = structured?.instructions ?? microdata.instructions
         }
-        if (draft.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
-           let title = fallback.title {
-            draft.title = title
+        if (draft.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+            draft.title = structured?.title ?? microdata.title
         }
+        if (draft.description?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+            draft.description = structured?.description
+        }
+        if draft.servings == nil { draft.servings = structured?.servings }
+        if draft.prepMinutes == nil { draft.prepMinutes = structured?.prepMinutes }
+        if draft.cookMinutes == nil { draft.cookMinutes = structured?.cookMinutes }
+        if draft.imageURLs.isEmpty { draft.imageURLs = structured?.imageURLs ?? [] }
 
         draft.sourceURL = page.url
         return draft

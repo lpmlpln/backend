@@ -68,6 +68,64 @@ struct OpenRouterDecodingTests {
         #expect(draft.ingredients[0].unit == "cup")
     }
 
+    @Test("schema.org JSON-LD supplies ingredients and instructions")
+    func jsonLDFallback() throws {
+        let html = """
+        <html><head>
+        <script type="application/ld+json">
+        {"@context":"https://schema.org","@graph":[
+          {"@type":"WebPage","name":"Recipe page"},
+          {"@type":"Recipe",
+           "name":"Spring Cutlets with Arugula and Tomatoes",
+           "description":"A spring recipe.",
+           "recipeYield":["4","4 servings"],
+           "prepTime":"PT15M","cookTime":"PT10M",
+           "recipeIngredient":[
+             "4 nr cutlets ( of veal)","50 gr butter","2 nr eggs",
+             "to taste breadcrumbs","3 nr fresh tomatoes","1 bunch arugula",
+             "to taste extra virgin olive oil","to taste wine vinegar","1 pinch salt"
+           ],
+           "recipeInstructions":[
+             {"@type":"HowToStep","text":"Beat the eggs in a bowl."},
+             {"@type":"HowToStep","text":"Dip the cutlets in the eggs."}
+           ],
+           "image":["https://example.com/cutlets.jpg"]
+          }
+        ]}
+        </script></head></html>
+        """
+
+        let structured = try #require(RecipeStructuredData.extract(from: html))
+        #expect(structured.title == "Spring Cutlets with Arugula and Tomatoes")
+        #expect(structured.servings == 4)
+        #expect(structured.prepMinutes == 15)
+        #expect(structured.cookMinutes == 10)
+        #expect(structured.ingredients.count == 9)
+        #expect(structured.instructions.count == 2)
+        #expect(structured.imageURLs.map(\.absoluteString) == ["https://example.com/cutlets.jpg"])
+
+        var draft = try OpenRouterRecipeExtractor.parseCompletion(Data(
+            """
+            {"title":null,"ingredients":null,"instructions":null,
+             "servings":null,"imageURLs":null,"dietaryTags":null}
+            """.utf8
+        ))
+        draft.ingredients = structured.ingredients
+        draft.instructions = structured.instructions
+        draft.title = structured.title
+        draft.description = structured.description
+        draft.servings = structured.servings
+        draft.prepMinutes = structured.prepMinutes
+        draft.cookMinutes = structured.cookMinutes
+        draft.imageURLs = structured.imageURLs
+        draft.sourceURL = URL(string: "https://verdegusto.it/en/ricette/spring-cutlets-with-arugula-and-tomatoes-spring-recipe")
+
+        let imported = try ImportValidator.validate(draft, ownerID: UUID())
+        #expect(imported.recipe.ingredients.count == 9)
+        #expect(imported.recipe.instructions.count == 2)
+        #expect(imported.recipe.servings == 4)
+    }
+
     @Test("Null arrays are filled from microdata before validation")
     func microdataFallback() throws {
         let json = """
