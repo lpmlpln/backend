@@ -99,8 +99,11 @@ struct ErrorMiddleware: AsyncMiddleware {
         }
         return Response(
             status: .found,
-            headers: ["Location": "/admin/login"],
-            body: .empty
+            headers: [
+                "Location": "/admin/login",
+                "Content-Type": "text/html; charset=utf-8"
+            ],
+            body: .init(string: "")
         )
     }
 
