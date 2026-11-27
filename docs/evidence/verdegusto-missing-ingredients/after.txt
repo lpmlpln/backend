@@ -1,0 +1,10 @@
+Same request, same real page HTML and same recorded completion shape, after
+routing the fallback through OpenRouterRecipeExtractor.applyStructuredFallback:
+
+  POST /recipes/import/<jobID>/run -> status: succeeded (200)
+  GET /recipes/<id>:
+    title               = "Spring Cutlets with Arugula and Tomatoes"
+    ingredients.count   = 9
+    instructions.count  = 8
+    servings            = 4
+    visibility          = public, isImported = true

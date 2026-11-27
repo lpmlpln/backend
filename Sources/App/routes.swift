@@ -1,9 +1,19 @@
 import Vapor
 
+/// Identifies exactly which revision is answering requests. Vercel injects
+/// `VERCEL_GIT_COMMIT_SHA`; other hosts can set `GIT_COMMIT_SHA`.
+func deploymentRevision() -> String {
+    Environment.get("VERCEL_GIT_COMMIT_SHA")
+        ?? Environment.get("GIT_COMMIT_SHA")
+        ?? "local"
+}
+
 func registerRoutes(_ app: Application) async throws {
-    app.get("health") { _ in ["status": "ok"] }
+    app.get("health") { _ -> [String: String] in
+        ["status": "ok", "revision": deploymentRevision()]
+    }
     app.get("health", "ready") { _ -> [String: String] in
-        ["status": "ready"]
+        ["status": "ready", "revision": deploymentRevision()]
     }
 
     // Well-known Apple app site association is served statically in production.

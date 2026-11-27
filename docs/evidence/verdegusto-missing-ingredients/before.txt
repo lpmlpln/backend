@@ -1,0 +1,16 @@
+Report from the user (original symptom):
+  importing https://verdegusto.it/en/ricette/spring-cutlets-with-arugula-and-tomatoes-spring-recipe
+  returned "MealPlannerCore.ImportValidationError.missingIngredients"
+
+First run of the regression fixture (real page HTML + recorded null-array
+completion), before the shared fallback was used by the test extractor:
+
+  POST /recipes/import/<jobID>/run
+  500 Internal Server Error
+  {"error":{"code":"SERVER_ERROR","message":"Something went wrong."}}
+
+  server log: [App] MealPlannerCore.ImportValidationError.missingTitle
+
+This is why the fixture replays the *shared* fallback function rather than a
+copy in the test double: the first test double bypassed the very code that
+fixes the bug and produced a misleading failure.

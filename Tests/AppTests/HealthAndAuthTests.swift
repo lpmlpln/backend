@@ -16,6 +16,18 @@ struct HealthAndAuthTests {
     
         })}
 
+    @Test("Health endpoints report the deployed revision")
+    func healthRevision() async throws {
+        try await testGate.run(TestBody {
+        let app = try await makeTestApp()
+        let expected = deploymentRevision()
+        for path in ["/health", "/health/ready"] {
+            let response: [String: String] = try await apiRequest(app, .GET, path)
+            #expect(response["revision"] == expected, "\(path) did not report the deployed revision")
+        }
+        try await app.asyncShutdown()
+        })}
+
     @Test("Magic link flow authenticates and returns tokens")
     func magicLink() async throws {
         try await testGate.run(TestBody {

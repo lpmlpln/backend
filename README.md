@@ -147,9 +147,39 @@ See `.env.example`. All secrets are environment variables; none are committed.
 
 ## Tests
 
-`swift test` runs 53 integration tests against real databases with
-fake email, Apple, page-fetch, extraction and image-storage adapters. The admin
-UI is covered by the same suite; Playwright is added in the deployment phase.
+`swift test` runs 56 integration tests against real databases with
+fake email, Apple, page-fetch, extraction and image-storage adapters.
+
+Real bug reports are kept as fixtures in `Tests/AppTests/Fixtures`. The
+VerdeGusto page that produced `missingIngredients` is replayed through the real
+import pipeline in `ImportFixtureTests`, using the recorded completion shape
+with `null` arrays. An opt-in live check verifies the page still exposes its
+structured data:
+
+```bash
+RUN_LIVE_IMPORT_TESTS=1 swift test --filter ImportFixtureTests
+```
+
+The admin UI is covered by Playwright in [`e2e/`](e2e/README.md), with
+screenshots, traces and videos retained on failure. Never run it against
+production: it creates users and import jobs.
+
+## Verifying a deployment
+
+`/health` and `/health/ready` report the deployed revision from
+`VERCEL_GIT_COMMIT_SHA`, so you can tell whether the server is running the fix
+you just pushed. After every deploy:
+
+```bash
+Scripts/smoke.sh https://your-app.vercel.app
+EXPECTED_REVISION=<sha> SMOKE_EMAIL=user@example.com \
+  SMOKE_ACCESS_TOKEN=<jwt> Scripts/smoke.sh https://your-app.vercel.app
+```
+
+The smoke test checks health, readiness, the admin redirect, the login page,
+and — when credentials are supplied — a magic-link request and a real import of
+the previously failing URL. An authenticated import needs `OPENROUTER_API_KEY`
+configured on the server.
 
 ## Routes
 

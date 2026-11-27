@@ -1,0 +1,13 @@
+Regression test:
+  Tests/AppTests/ImportFixtureTests.swift :: verdegustoImport
+
+Input:
+  Tests/AppTests/Fixtures/recipes/verdegusto-spring-cutlets.html  (verbatim page)
+  Tests/AppTests/Fixtures/openrouter/verdegusto-spring-cutlets.json (null arrays)
+
+Result:
+  Test run with 56 tests in 11 suites passed after 4.479 seconds.
+  "VerdeGusto import succeeds at the HTTP layer" passed after 0.676 seconds.
+
+Opt-in live check (page may change without a code change):
+  RUN_LIVE_IMPORT_TESTS=1 swift test --filter ImportFixtureTests

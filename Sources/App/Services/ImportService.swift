@@ -176,12 +176,21 @@ final class OpenRouterRecipeExtractor: RecipeExtracting, @unchecked Sendable {
         }
 
         var draft = try Self.parseCompletion(contentData)
+        draft = Self.applyStructuredFallback(to: draft, html: page.html)
+        draft.sourceURL = page.url
+        return draft
+    }
 
-        // Some models return null for arrays even when the page contains them.
-        // Fill the gaps from schema.org structured data (JSON-LD first, then
-        // microdata) before giving up on the import.
-        let structured = RecipeStructuredData.extract(from: page.html)
-        let microdata = Self.microdataFallback(from: page.html)
+    /// Fills fields the model left empty from schema.org structured data on the
+    /// page (JSON-LD first, then microdata). Shared with regression tests so
+    /// they exercise the same code path as a real import.
+    static func applyStructuredFallback(
+        to draft: ImportedRecipeDraft,
+        html: String
+    ) -> ImportedRecipeDraft {
+        var draft = draft
+        let structured = RecipeStructuredData.extract(from: html)
+        let microdata = microdataFallback(from: html)
 
         if draft.ingredients.isEmpty {
             draft.ingredients = structured?.ingredients ?? microdata.ingredients.map {
@@ -201,8 +210,6 @@ final class OpenRouterRecipeExtractor: RecipeExtracting, @unchecked Sendable {
         if draft.prepMinutes == nil { draft.prepMinutes = structured?.prepMinutes }
         if draft.cookMinutes == nil { draft.cookMinutes = structured?.cookMinutes }
         if draft.imageURLs.isEmpty { draft.imageURLs = structured?.imageURLs ?? [] }
-
-        draft.sourceURL = page.url
         return draft
     }
 
