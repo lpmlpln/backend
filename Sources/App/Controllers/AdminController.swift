@@ -40,6 +40,30 @@ struct AdminSessionAuthenticator: AsyncRequestAuthenticator {
     }
 }
 
+/// Redirects unauthenticated admin requests to the login page instead of
+/// returning a JSON 401. Runs after `AdminSessionAuthenticator`, so an expired
+/// or missing session is treated the same way.
+struct AdminRedirectMiddleware: AsyncMiddleware {
+    func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
+        let path = request.url.path
+        guard path == "/admin" || path.hasPrefix("/admin/") else {
+            return try await next.respond(to: request)
+        }
+        let isPublic = path == "/admin/login"
+            || path == "/admin/verify"
+            || path.hasPrefix("/admin/static/")
+
+        if !isPublic, request.adminSession == nil {
+            return Response(
+                status: .found,
+                headers: ["Location": "/admin/login"],
+                body: .empty
+            )
+        }
+        return try await next.respond(to: request)
+    }
+}
+
 struct AdminController: Sendable {
     func register(routes: some RoutesBuilder) {
         routes.get("admin", "login", use: loginPage)

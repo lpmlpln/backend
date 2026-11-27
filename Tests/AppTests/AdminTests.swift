@@ -39,10 +39,37 @@ struct AdminTests {
         try await testGate.run(TestBody {
         let app = try await makeTestApp()
         try await resetDatabase(app)
-        try await apiStatus(app, .GET, "/admin", expected: .unauthorized)
+
+        for path in [
+            "/admin",
+            "/admin/users",
+            "/admin/users/new",
+            "/admin/recipes",
+            "/admin/recipes/new",
+            "/admin/imports",
+            "/admin/imports/new",
+            "/admin/audit",
+        ] {
+            let response: XCTHTTPResponse = try await apiResponse(app, .GET, path, expected: .found)
+            #expect(response.headers[.location].first == "/admin/login", "\(path) did not redirect")
+        }
+
+        // The login page itself stays reachable without a session.
+        try await apiStatus(app, .GET, "/admin/login")
         try await app.asyncShutdown()
     
         })}
+
+    @Test("Unauthenticated admin POST actions redirect to login")
+    func postRedirect() async throws {
+        try await testGate.run(TestBody {
+            let app = try await makeTestApp()
+            try await resetDatabase(app)
+            let response: XCTHTTPResponse = try await apiResponse(app, .POST, "/admin/users", expected: .found)
+            #expect(response.headers[.location].first == "/admin/login")
+            try await app.asyncShutdown()
+        })
+    }
 
     @Test("Admin can access the dashboard and manage users")
     func adminFlow() async throws {

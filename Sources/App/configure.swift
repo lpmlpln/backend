@@ -205,6 +205,7 @@ public func configure(_ app: Application, databaseValues: [String: String]? = ni
     app.middleware.use(ErrorMiddleware())
     app.middleware.use(BearerAuthenticator())
     app.middleware.use(AdminSessionAuthenticator())
+    app.middleware.use(AdminRedirectMiddleware())
     app.middleware.use(CORSMiddleware(configuration: .init(
         allowedOrigin: .originBased,
         allowedMethods: [.GET, .POST, .PATCH, .PUT, .DELETE, .OPTIONS],
