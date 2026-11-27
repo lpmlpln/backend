@@ -1,0 +1,14 @@
+{
+  "title": "Spring Cutlets with Arugula and Tomatoes",
+  "description": "A spring recipe.",
+  "servings": 4,
+  "prepMinutes": 15,
+  "cookMinutes": 10,
+  "ingredients": [
+    { "raw": "4 veal cutlets", "name": "Veal cutlets", "quantity": 4, "unit": "piece" },
+    { "raw": "", "name": "", "quantity": null, "unit": null }
+  ],
+  "instructions": ["Beat the eggs."],
+  "dietaryTags": [],
+  "imageURLs": []
+}

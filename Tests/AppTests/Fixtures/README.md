@@ -7,12 +7,15 @@ report for:
 
 - `recipes/verdegusto-spring-cutlets.html` — the page as fetched (kept verbatim,
   including its `schema.org/Recipe` JSON-LD `@graph`).
-- `openrouter/verdegusto-spring-cutlets.json` — the completion shape that
-  triggered the bug: every extracted array is `null`, so the import can only
-  succeed if structured data on the page is used as a fallback.
+- `openrouter/verdegusto-spring-cutlets.json` — every extracted array is `null`.
+- `openrouter/verdegusto-blank-ingredients.json` — a non-empty array of blank
+  objects, which bypassed the original "is the array empty?" check.
+- `openrouter/verdegusto-partial-ingredients.json` — one usable ingredient and
+  one blank one, which bypassed the same check.
 
-`ImportFixtureTests` feeds both files through the real import pipeline
-(`.parseCompletion` → `ImportService` → `POST /recipes/import/:id/run`) and
-asserts the resulting recipe has all nine ingredients. Do not replace the HTML
-with a hand-written snippet: synthetic markup is what let the original fix pass
-while the reported import stayed broken.
+`ImportFixtureTests` feeds each shape through the real import pipeline
+(`.parseCompletion` → fallback → `ImportService` →
+`POST /recipes/import/:id/run`) and asserts the resulting recipe has all nine
+ingredients from the page. Do not replace the HTML with a hand-written snippet:
+synthetic markup is what let the original fix pass while the reported import
+stayed broken.

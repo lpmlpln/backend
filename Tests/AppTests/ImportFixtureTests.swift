@@ -27,17 +27,22 @@ struct ImportFixtureTests {
         return try Data(contentsOf: url)
     }
 
-    /// The exact report: real page HTML + a completion with null arrays must
-    /// still produce a recipe with all nine ingredients.
+    /// The exact report: real page HTML plus the completion shapes that can
+    /// trigger `missingIngredients` must still produce all nine ingredients.
     @Test("VerdeGusto import succeeds at the HTTP layer")
     func verdegustoImport() async throws {
-        try await testGate.run(TestBody {
+        for completionName in [
+            "verdegusto-spring-cutlets.json",
+            "verdegusto-blank-ingredients.json",
+            "verdegusto-partial-ingredients.json",
+        ] {
+            try await testGate.run(TestBody {
             let app = try await makeTestApp()
             try await resetDatabase(app)
             let user = try await signIn(app)
 
             let html = String(decoding: try fixture("recipes/verdegusto-spring-cutlets.html"), as: UTF8.self)
-            let completion = try fixture("openrouter/verdegusto-spring-cutlets.json")
+            let completion = try fixture("openrouter/\(completionName)")
             let draft = try OpenRouterRecipeExtractor.parseCompletion(completion)
 
             app.importService = ImportService(
@@ -74,6 +79,7 @@ struct ImportFixtureTests {
 
             try await app.asyncShutdown()
         })
+        }
     }
 
     /// Opt-in: the live page can change without a code change. Run locally or

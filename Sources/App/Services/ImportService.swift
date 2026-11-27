@@ -192,13 +192,19 @@ final class OpenRouterRecipeExtractor: RecipeExtracting, @unchecked Sendable {
         let structured = RecipeStructuredData.extract(from: html)
         let microdata = microdataFallback(from: html)
 
-        if draft.ingredients.isEmpty {
-            draft.ingredients = structured?.ingredients ?? microdata.ingredients.map {
-                ImportedIngredient(raw: $0, name: nil)
-            }
+        // The page's structured data is authoritative for an imported recipe.
+        // Prefer it whenever it is richer than the model's output — this covers
+        // empty arrays, blank objects and partially hallucinated lists alike.
+        let pageIngredients = structured?.ingredients ?? microdata.ingredients.map {
+            ImportedIngredient(raw: $0, name: nil)
         }
-        if draft.instructions.isEmpty {
-            draft.instructions = structured?.instructions ?? microdata.instructions
+        if pageIngredients.count > Self.usableIngredientCount(draft.ingredients) {
+            draft.ingredients = pageIngredients
+        }
+
+        let pageInstructions = structured?.instructions ?? microdata.instructions
+        if pageInstructions.count > Self.usableInstructionCount(draft.instructions) {
+            draft.instructions = pageInstructions
         }
         if (draft.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
             draft.title = structured?.title ?? microdata.title
@@ -211,6 +217,20 @@ final class OpenRouterRecipeExtractor: RecipeExtracting, @unchecked Sendable {
         if draft.cookMinutes == nil { draft.cookMinutes = structured?.cookMinutes }
         if draft.imageURLs.isEmpty { draft.imageURLs = structured?.imageURLs ?? [] }
         return draft
+    }
+
+    private static func usableIngredientCount(_ ingredients: [ImportedIngredient]) -> Int {
+        ingredients.filter { ingredient in
+            let name = (ingredient.name ?? ingredient.raw)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return !name.isEmpty
+        }.count
+    }
+
+    private static func usableInstructionCount(_ instructions: [String]) -> Int {
+        instructions.filter {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
     }
 
     /// Extracts schema.org microdata values used as a fallback for incomplete
@@ -499,11 +519,24 @@ struct ImportService: Sendable {
             job.status = "saving_images"
             try await job.save(on: db)
 
-            let imported = try ImportValidator.validate(
-                draft,
-                ownerID: job.$user.id,
-                recipeID: UUID()
-            )
+            let imported: ImportedRecipe
+            do {
+                imported = try ImportValidator.validate(
+                    draft,
+                    ownerID: job.$user.id,
+                    recipeID: UUID()
+                )
+            } catch let validationError as ImportValidationError {
+                // Surface why the page could not supply usable ingredients so
+                // the admin job row and function logs are actionable.
+                let structuredCount = RecipeStructuredData.extract(from: page.html)?.ingredients.count ?? 0
+                throw AppError.importFailed(
+                    "Import validation failed (\(validationError.rawValue)). "
+                        + "Model ingredients: \(draft.ingredients.count), "
+                        + "structured ingredients on page: \(structuredCount), "
+                        + "page bytes: \(page.html.utf8.count)."
+                )
+            }
 
             if let existing = try await RecipeModel.query(on: db)
                 .filter(\.$sourceURLHash == job.urlHash)
